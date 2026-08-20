@@ -1,0 +1,10 @@
+{
+  "user_name": "chefe",
+  "city": "Valinhos",
+  "personality": "zueira",
+  "language": "pt-BR",
+  "xai_api_key": "",
+  "wake_word": "jeremias",
+  "voice_enabled": true,
+  "voice_rate": 175
+}
