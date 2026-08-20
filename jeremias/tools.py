@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import shutil
 import subprocess
+import threading
 import webbrowser
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
@@ -419,3 +421,123 @@ def math_eval(question: str) -> str:
     if not data.get("ok"):
         return data.get("result") or "não calculei"
     return f"{data['expr']}  →  {data['result']}"
+
+
+ROOT = Path(__file__).resolve().parent.parent
+NOTES_PATH = ROOT / "notes.json"
+_timer_hook: Callable[[str], None] | None = None
+
+
+def set_timer_hook(fn: Callable[[str], None] | None) -> None:
+    global _timer_hook
+    _timer_hook = fn
+
+
+def parse_delay(raw: str) -> tuple[int, str]:
+    t = raw.lower()
+    label = re.sub(r".*?(me avisa|timer|alarme|lembra)\s*(pra|para|de|que)?\s*", "", raw, flags=re.I).strip() or "timer"
+    sec = 60
+    m = re.search(r"(\d+)\s*(hora|horas)\b", t)
+    if m:
+        sec = int(m.group(1)) * 3600
+    m = re.search(r"(\d+)\s*(minuto|minutos|min)\b", t)
+    if m:
+        sec = int(m.group(1)) * 60
+    m = re.search(r"(\d+)\s*(segundo|segundos|seg)\b", t)
+    if m:
+        sec = int(m.group(1))
+    return max(1, min(sec, 24 * 3600)), label
+
+
+def arm_timer(raw: str) -> str:
+    seconds, label = parse_delay(raw)
+    def fire() -> None:
+        if _timer_hook:
+            _timer_hook(label)
+    threading.Timer(seconds, fire).start()
+    if seconds >= 60:
+        human = f"{seconds // 60} min"
+    else:
+        human = f"{seconds} s"
+    return f"Timer {human} armado. {label}"
+
+
+def note_add(raw: str) -> str:
+    text = re.sub(r"^(jeremias[,:\s]*)", "", raw, flags=re.I)
+    text = re.sub(r"^(anota[r]?|nota)\s*(que)?\s*", "", text, flags=re.I).strip()
+    if not text:
+        return "O que eu anoto?"
+    items: list = []
+    if NOTES_PATH.exists():
+        try:
+            items = json.loads(NOTES_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            items = []
+    items.append({"at": datetime.now().strftime("%d/%m %H:%M"), "text": text})
+    NOTES_PATH.write_text(json.dumps(items[-80:], ensure_ascii=False, indent=2), encoding="utf-8")
+    return f"Anotado: {text}"
+
+
+def note_list() -> str:
+    if not NOTES_PATH.exists():
+        return "Nenhuma nota ainda."
+    try:
+        items = json.loads(NOTES_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return "Arquivo de notas corrompido."
+    if not items:
+        return "Nenhuma nota ainda."
+    return "\n".join(f"- {i['at']} {i['text']}" for i in items[-12:])
+
+
+def clipboard_get() -> str:
+    if os.name != "nt":
+        return "Clipboard só no Windows."
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+        capture_output=True,
+        text=True,
+        timeout=8,
+    )
+    return (r.stdout or "").strip() or "(área de transferência vazia)"
+
+
+def clipboard_set(text: str) -> str:
+    if os.name != "nt":
+        return "Clipboard só no Windows."
+    subprocess.run(["clip"], input=text.encode("utf-16le"), timeout=8, check=False)
+    return f"Copiado: {text[:80]}"
+
+
+def sysinfo() -> str:
+    parts = [now_pt()]
+    try:
+        import psutil
+
+        cpu = psutil.cpu_percent(interval=0.35)
+        ram = psutil.virtual_memory()
+        root = "C:\\" if os.name == "nt" else "/"
+        disk = psutil.disk_usage(root)
+        parts.append(f"CPU {cpu:.0f}%")
+        parts.append(f"RAM {ram.percent:.0f}% ({ram.used // (1024**3)}/{ram.total // (1024**3)} GB)")
+        parts.append(f"disco {disk.percent:.0f}%")
+    except Exception:
+        parts.append("vitals: pip install psutil")
+    return " · ".join(parts)
+
+
+def list_known(name: str) -> str:
+    key = name.lower().strip()
+    folders = {
+        "desktop": desktop_dir,
+        "area de trabalho": desktop_dir,
+        "área de trabalho": desktop_dir,
+        "documentos": lambda: Path.home() / "Documents",
+        "downloads": lambda: Path.home() / "Downloads",
+    }
+    fn = folders.get(key, desktop_dir)
+    path = fn()
+    if not path.exists():
+        return f"Não achei {path}"
+    names = sorted(p.name + ("/" if p.is_dir() else "") for p in path.iterdir())[:40]
+    return f"{path}:\n" + "\n".join(names)

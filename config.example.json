@@ -8,5 +8,6 @@
   "groq_api_key": "",
   "wake_word": "jeremias",
   "voice_enabled": true,
-  "voice_rate": 175
+  "voice_rate": 130,
+  "always_on_top": false
 }

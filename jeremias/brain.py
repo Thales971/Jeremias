@@ -20,6 +20,28 @@ def detect(raw: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     if re.search(r"\b(piada|conta uma piada|me faz rir)\b", t):
         return [("joke", "")]
+    if re.search(r"\b(me avisa|timer|alarme|me lembra)\b", t) or re.search(
+        r"\b(daqui a|em)\s+\d+\s*(minuto|minutos|segundo|segundos|hora|horas)\b", t
+    ):
+        return [("timer", raw)]
+    if re.search(r"\b(minhas notas|l[eê] as notas|mostra as notas)\b", t):
+        return [("notes", "")]
+    if re.search(r"\b(anota[r]?|nota que)\b", t):
+        return [("note", raw)]
+    if re.search(r"\b(area de transferencia|área de transferência|clipboard|o que tem copiado)\b", t):
+        return [("clipget", "")]
+    if re.search(r"\b(copia(r)? (isso|isto|o texto)|copia:)\b", t):
+        return [("clipset", raw)]
+    if re.search(r"\b(cpu|mem[oó]ria|status do pc|uso do pc|recursos|vitals)\b", t):
+        return [("sysinfo", "")]
+    if re.search(r"\b(lista|mostra)\b.+\b(desktop|area de trabalho|área de trabalho|documentos|downloads)\b", t):
+        if "download" in t:
+            arg = "downloads"
+        elif "documento" in t:
+            arg = "documentos"
+        else:
+            arg = "desktop"
+        return [("listdir", arg)]
     if re.search(r"\b(whatsapp|zap|wpp)\b", t):
         return [("whatsapp", raw)]
     if re.search(r"\b(email|e-mail)\b", t) and "@" in raw:
@@ -130,6 +152,21 @@ def run_tools(raw: str, city_default: str, confirm: ConfirmFn | None) -> list[di
             elif tool == "lang":
                 lang, code = arg.split("|||", 1)
                 result = tools.run_lang(lang, code, confirm=confirm)
+            elif tool == "timer":
+                result = tools.arm_timer(arg)
+            elif tool == "note":
+                result = tools.note_add(arg)
+            elif tool == "notes":
+                result = tools.note_list()
+            elif tool == "clipget":
+                result = tools.clipboard_get()
+            elif tool == "clipset":
+                text = re.sub(r"^.*?(copia(r)? (isso|isto|o texto)|copia:)\s*", "", arg, flags=re.I).strip()
+                result = tools.clipboard_set(text)
+            elif tool == "sysinfo":
+                result = tools.sysinfo()
+            elif tool == "listdir":
+                result = tools.list_known(arg)
             else:
                 result = "ferramenta desconhecida"
             hits.append({"tool": tool, "arg": arg, "result": result})

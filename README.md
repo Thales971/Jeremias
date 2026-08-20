@@ -1,122 +1,56 @@
 # JEREMIAS
 
-Assistente pessoal de **desktop** — não é site. Janela própria, HUD hi-tech (amarelo / preto / cinza / azul-escuro), voz, terminal, pesquisa, clima, matemática e interpretador.
+Assistente pessoal de **desktop** — não é site. Janela própria, HUD hi-tech (amarelo / preto / cinza / azul-escuro), voz grave, terminal, pesquisa, clima, matemática.
 
-Autor: **Thales Vitor Boehm**
-
-Repositório: [github.com/Thales971/Jeremias](https://github.com/Thales971/Jeremias)
+Autor: **Thales Vitor Boehm** · [github.com/Thales971/Jeremias](https://github.com/Thales971/Jeremias)
 
 ## O que ele faz
 
-- Cumprimenta com **bom dia / boa tarde / boa noite** na hora que abre
-- Fala e escuta em pt-BR (microfone + voz). Tem mic contínuo.
-- Pesquisa (Wikipedia / DuckDuckGo)
-- Temperatura (Open-Meteo, plano B: wttr.in) — padrão Valinhos
-- Calculadora avançada: trig, raiz, log, fatorial, `2^10`, equação linear `2x+4=10`
-- Piadas
-- Abre YouTube (com busca), Gmail, WhatsApp (`wa.me`) e e-mail (`mailto:`)
-- Abre apps do PC (Chrome, VS Code, Discord, Spotify, Bloco de notas…)
-- Abre pastas (Área de Trabalho, Documentos, Downloads…)
-- Cria pasta na Área de Trabalho
-- Terminal: Python, Node/JS, PowerShell, CMD, bash, ruby, php, lua
-- Volume, travar a tela, print da tela
-- **Iniciar com o Windows** (atalho na pasta Inicializar)
-- Duas personalidades: **zueira** (padrão) e **formal**
-- Cérebro via OpenRouter (Llama 3.3) → xAI → Groq, se as chaves existirem no `config.json`
+- Cumprimenta com **bom dia / boa tarde / boa noite**
+- Fala **todas** as respostas em voz alta (Edge TTS grave, estilo Ultron) e escuta o mic
+- Pesquisa, clima (Valinhos), calculadora (trig, raiz, fatorial, `2x+4=10`)
+- Piadas, YouTube, Gmail, WhatsApp, e-mail
+- Abre apps e pastas do PC, cria pasta, terminal (Python, Node, PowerShell, CMD, bash…)
+- Volume, trava a tela, print, **iniciar com o Windows**
+- **Timer** (`me avisa em 5 minutos`)
+- **Notas** (`anota que prova é terça` / `minhas notas`)
+- **Clipboard** e **status do PC** (CPU/RAM/disco)
+- Três modos: **zueira**, **formal**, **ultron**
+- Tela **Ajustes** pra colar a API key sem editar JSON na mão
+- Sempre no topo, histórico de comandos (seta pra cima)
 
-## Windows — passo a passo
+Cérebro: OpenRouter (Llama 3.3) → xAI → Groq.
 
-1. Instala o [Python 3.11+](https://www.python.org/downloads/) e marca **Add Python to PATH**
-2. Baixa o ZIP em [Thales971/Jeremias](https://github.com/Thales971/Jeremias) e extrai
-3. Dá dois cliques em `start.bat`
+## Windows
 
-Na primeira vez o `start.bat` cria o `.venv`, instala as libs e copia `config.example.json` → `config.json`.
+1. Python 3.11+ em [python.org](https://www.python.org/downloads/) com **Add python.exe to PATH**. No teu PC o comando é `py`.
+2. `git clone https://github.com/Thales971/Jeremias.git`
+3. `cd Jeremias` e dois cliques em `start.bat`
 
-Ou no terminal:
+Ou:
 
-```bat
-cd Jeremias
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy config.example.json config.json
-notepad config.json
-python main.py
+```powershell
+cd C:\Users\User\Jeremias
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
 ```
 
-### Colocar as chaves de IA (opcional, mas deixa ele conversar de verdade)
+### API key
 
-Abre o `config.json` e cola **só aí** (esse arquivo **não** vai pro GitHub):
+No app: **ajustes / api key** → cola OpenRouter → salvar.
 
-```json
-"openrouter_api_key": "sk-or-v1-...",
-"groq_api_key": "gsk_..."
-```
+Ou `config.json` (não vai pro GitHub).
 
-Ordem que ele tenta: OpenRouter → xAI → Groq.
-
-### Microfone
-
-Se o `pyaudio` brigar no Windows:
-
-```bat
-pip install pipwin
-pipwin install pyaudio
-```
-
-Sem microfone ainda funciona — você digita. No HUD tem o botão **mic** e **mic contínuo**.
-
-### Iniciar junto com o Windows
-
-No app, clica **iniciar com o windows** (ou fala “iniciar automaticamente com o Windows”). Ele solta um `Jeremias.bat` na pasta Inicializar.
-
-## Exemplos de fala
+## Exemplos
 
 - `Qual a temperatura em Valinhos?`
-- `Seno de 30` / `Raiz de 144` / `5 fatorial` / `Quanto é 2x+4=10`
+- `Seno de 30` / `2x+4=10`
+- `Me avisa em 1 minuto estudar`
+- `Anota que a prova é terça`
+- `Status do PC`
+- `Abre o Chrome`
 - `Conta uma piada`
-- `Abre o YouTube lofi`
-- `Abre o Gmail`
-- `WhatsApp 19999999999 e diz tô saindo`
-- `Manda email pra fulano@gmail.com assunto prova corpo manda o PDF`
-- `Abre o Chrome` / `Abre documentos`
-- `Cria uma pasta chamada Provas`
-- `Roda no terminal dir`
-- `Roda em python: print(sum(range(10)))`
-- `Roda em node: console.log(2+2)`
-- `Tira um print`
-- `Trava o PC` / `Aumenta o volume`
-
-## Segurança
-
-- `config.json` está no `.gitignore`. **Nunca** commita chave.
-- Terminal bloqueia `format`, `rm -rf`, `shutdown` etc. sem confirmação.
-- Interpretador Python rápido não deixa `open` / `subprocess`.
-- O app roda **local** no seu PC.
-
-## Linux / macOS
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp config.example.json config.json
-python main.py
-```
-
-No Linux, `portaudio` se quiser microfone (`sudo apt install portaudio19-dev`). Auto-start e volume/trava são Windows por enquanto.
-
-## Arquitetura
-
-```
-main.py                  # sobe a janela
-jeremias/hud.py          # HUD CustomTkinter
-jeremias/brain.py        # intenções + LLM
-jeremias/math.py         # trig / fatorial / equação
-jeremias/voice.py        # fala / escuta
-jeremias/tools.py        # PC, terminal, clima, busca, zap, e-mail
-jeremias/personality.py  # zueira / formal
-```
 
 ## Licença
 
