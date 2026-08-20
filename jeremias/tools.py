@@ -551,12 +551,27 @@ def news() -> str:
 
 
 def fx() -> str:
-    r = requests.get("https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL", headers=UA, timeout=10)
-    r.raise_for_status()
-    d = r.json()
-    usd = float(d["USDBRL"]["bid"])
-    eur = float(d["EURBRL"]["bid"])
-    return f"Dólar R$ {usd:.2f} · Euro R$ {eur:.2f}"
+    try:
+        r = requests.get("https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL", headers=UA, timeout=10)
+        if r.status_code == 429:
+            return _fx_fallback()
+        r.raise_for_status()
+        d = r.json()
+        usd = float(d["USDBRL"]["bid"])
+        eur = float(d["EURBRL"]["bid"])
+        return f"Dólar R$ {usd:.2f} · Euro R$ {eur:.2f}"
+    except Exception:
+        return _fx_fallback()
+
+
+def _fx_fallback() -> str:
+    usd = requests.get("https://api.frankfurter.app/latest?from=USD&to=BRL", headers=UA, timeout=10)
+    eur = requests.get("https://api.frankfurter.app/latest?from=EUR&to=BRL", headers=UA, timeout=10)
+    usd.raise_for_status()
+    eur.raise_for_status()
+    u = float(usd.json()["rates"]["BRL"])
+    e = float(eur.json()["rates"]["BRL"])
+    return f"Dólar R$ {u:.2f} · Euro R$ {e:.2f}"
 
 
 def public_ip() -> str:
