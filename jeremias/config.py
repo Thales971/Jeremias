@@ -18,7 +18,7 @@ DEFAULTS: dict[str, Any] = {
     "groq_api_key": "",
     "wake_word": "jeremias",
     "voice_enabled": True,
-    "voice_rate": 175,
+    "voice_rate": 130,
 }
 
 
@@ -40,6 +40,7 @@ def load() -> dict[str, Any]:
         data["groq_api_key"] = groq_key
     if data.get("personality") not in ("zueira", "formal"):
         data["personality"] = "zueira"
+    data["voice_enabled"] = True
     return data
 
 

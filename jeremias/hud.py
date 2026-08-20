@@ -20,16 +20,28 @@ STEEL = "#8b93a7"
 FG = "#e7edf7"
 
 
+def brain_label(cfg: dict[str, Any]) -> str:
+    if (cfg.get("openrouter_api_key") or "").strip():
+        return "cérebro · openrouter"
+    if (cfg.get("groq_api_key") or "").strip():
+        return "cérebro · groq"
+    if (cfg.get("xai_api_key") or "").strip():
+        return "cérebro · xai"
+    return "cérebro · offline"
+
+
 class JeremiasApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.cfg = config.load()
+        self.cfg["voice_enabled"] = True
         self.history: list[dict[str, str]] = []
-        self.voice = Voice(rate=int(self.cfg.get("voice_rate") or 175))
+        self.voice = Voice(rate=int(self.cfg.get("voice_rate") or 130))
         self.bus: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.angle = 0
         self.busy = False
         self.live = False
+        self.speaking = False
 
         ctk.set_appearance_mode("dark")
         self.title("JEREMIAS")
@@ -46,9 +58,11 @@ class JeremiasApp(ctk.CTk):
 
         self.after(40, self._tick)
         self.after(80, self._drain)
-        self._log("jeremias", personality.greet(self.cfg["personality"]))
-        if self.cfg.get("voice_enabled", True):
-            self.voice.speak(personality.greet(self.cfg["personality"]))
+        hello = personality.greet(self.cfg["personality"])
+        status = brain_label(self.cfg)
+        self._log("jeremias", hello)
+        self._log("jeremias", status + ("." if "offline" not in status else " — cola a chave no config.json."))
+        self._speak(hello)
 
     def _build_left(self) -> None:
         side = ctk.CTkFrame(self, fg_color=NAVY, corner_radius=16, width=250)
@@ -60,7 +74,13 @@ class JeremiasApp(ctk.CTk):
             text_color=YELLOW,
             font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"),
         ).pack(pady=(18, 4))
-        ctk.CTkLabel(side, text="SISTEMA ONLINE", text_color=STEEL, font=ctk.CTkFont(size=11)).pack()
+        self.brain_lbl = ctk.CTkLabel(
+            side,
+            text=brain_label(self.cfg).upper(),
+            text_color=YELLOW if "offline" not in brain_label(self.cfg) else STEEL,
+            font=ctk.CTkFont(size=11),
+        )
+        self.brain_lbl.pack()
         self.canvas = tk.Canvas(side, width=210, height=210, bg=NAVY, highlightthickness=0)
         self.canvas.pack(pady=16)
         self.status = ctk.CTkLabel(side, text="idle", text_color=YELLOW, font=ctk.CTkFont(size=12))
@@ -177,17 +197,26 @@ class JeremiasApp(ctk.CTk):
                 command=lambda c=cmd: self._submit(c),
             ).pack(fill="x", padx=12, pady=3)
 
+    def _speak(self, text: str) -> None:
+        self.speaking = True
+        self._set_status("falando")
+        self.voice.speak(text, on_end=lambda: self.bus.put(("spoke", None)))
+
     def _toggle_live(self) -> None:
         self.live = not self.live
-        self._log("jeremias", "Microfone contínuo ligado." if self.live else "Microfone contínuo off.")
-        if self.live and not self.busy:
+        msg = "Microfone contínuo ligado." if self.live else "Microfone contínuo off."
+        self._log("jeremias", msg)
+        self._speak(msg)
+        if self.live and not self.busy and not self.speaking:
             self._mic()
 
     def _toggle_persona(self) -> None:
         self.cfg["personality"] = "formal" if self.cfg["personality"] == "zueira" else "zueira"
         config.save(self.cfg)
         self.persona_btn.configure(text=f"modo {self.cfg['personality']}")
-        self._log("jeremias", f"Personalidade: {self.cfg['personality']}.")
+        msg = f"Personalidade: {self.cfg['personality']}."
+        self._log("jeremias", msg)
+        self._speak(msg)
 
     def _toggle_full(self) -> None:
         self.attributes("-fullscreen", not self.attributes("-fullscreen"))
@@ -239,6 +268,8 @@ class JeremiasApp(ctk.CTk):
         threading.Thread(target=work, daemon=True).start()
 
     def _mic(self) -> None:
+        if self.speaking:
+            return
         self._set_status("ouvindo")
         self.voice.listen_once(
             on_text=lambda t: self.bus.put(("heard", t)),
@@ -255,9 +286,15 @@ class JeremiasApp(ctk.CTk):
                 elif kind == "voice_err":
                     self._set_status("idle")
                     self._log("jeremias", payload)
+                    self._speak(payload)
                 elif kind == "confirm":
                     msg, box = payload
                     box.put(bool(messagebox.askyesno("Jeremias", msg)))
+                elif kind == "spoke":
+                    self.speaking = False
+                    self._set_status("idle")
+                    if self.live and not self.busy:
+                        self._mic()
                 elif kind == "done":
                     reply, hits = payload
                     self.busy = False
@@ -268,10 +305,7 @@ class JeremiasApp(ctk.CTk):
                             self._term(f"$ {h['arg']}\n{h['result']}")
                         if h["tool"] == "math":
                             self.math_lbl.configure(text=h["result"][:80])
-                    if self.cfg.get("voice_enabled", True):
-                        self.voice.speak(reply)
-                    if self.live and not self.busy:
-                        self.after(400, self._mic)
+                    self._speak(reply)
         except queue.Empty:
             pass
         self.after(80, self._drain)
@@ -306,7 +340,7 @@ class JeremiasApp(ctk.CTk):
         )
         c.create_oval(cx - 12, cy - 12, cx + 12, cy + 12, fill=YELLOW, outline="")
         self.clock.configure(text=datetime.now().strftime("%H:%M:%S"))
-        step = 8 if self.busy else 3
+        step = 8 if self.busy or self.speaking else 3
         self.angle = (self.angle + step) % 360
         self.after(33, self._tick)
 

@@ -6,3 +6,5 @@ pyttsx3>=2.90
 sympy>=1.13.0
 sounddevice>=0.5.0
 numpy>=2.0.0
+edge-tts>=7.0.0
+pygame>=2.6.0
