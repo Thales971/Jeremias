@@ -13,6 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
+import secrets
+import string
+import time
+import xml.etree.ElementTree as ET
 
 import requests
 
@@ -449,19 +453,6 @@ def parse_delay(raw: str) -> tuple[int, str]:
     return max(1, min(sec, 24 * 3600)), label
 
 
-def arm_timer(raw: str) -> str:
-    seconds, label = parse_delay(raw)
-    def fire() -> None:
-        if _timer_hook:
-            _timer_hook(label)
-    threading.Timer(seconds, fire).start()
-    if seconds >= 60:
-        human = f"{seconds // 60} min"
-    else:
-        human = f"{seconds} s"
-    return f"Timer {human} armado. {label}"
-
-
 def note_add(raw: str) -> str:
     text = re.sub(r"^(jeremias[,:\s]*)", "", raw, flags=re.I)
     text = re.sub(r"^(anota[r]?|nota)\s*(que)?\s*", "", text, flags=re.I).strip()
@@ -541,3 +532,179 @@ def list_known(name: str) -> str:
         return f"Não achei {path}"
     names = sorted(p.name + ("/" if p.is_dir() else "") for p in path.iterdir())[:40]
     return f"{path}:\n" + "\n".join(names)
+
+
+UA = {"User-Agent": "Jeremias/1.0"}
+REMINDERS_PATH = ROOT / "reminders.json"
+
+
+def news() -> str:
+    r = requests.get("https://g1.globo.com/rss/g1/", headers=UA, timeout=10)
+    r.raise_for_status()
+    root = ET.fromstring(r.content)
+    titles = []
+    for item in root.findall(".//item")[:6]:
+        title = (item.findtext("title") or "").strip()
+        if title:
+            titles.append("• " + title)
+    return "G1 agora:\n" + "\n".join(titles) if titles else "Sem manchetes agora."
+
+
+def fx() -> str:
+    r = requests.get("https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL", headers=UA, timeout=10)
+    r.raise_for_status()
+    d = r.json()
+    usd = float(d["USDBRL"]["bid"])
+    eur = float(d["EURBRL"]["bid"])
+    return f"Dólar R$ {usd:.2f} · Euro R$ {eur:.2f}"
+
+
+def public_ip() -> str:
+    r = requests.get("https://api.ipify.org?format=json", headers=UA, timeout=8)
+    r.raise_for_status()
+    ip = r.json().get("ip", "?")
+    return f"IP público: {ip}"
+
+
+def translate(raw: str) -> str:
+    q = re.sub(r"^(jeremias[,:\s]*)", "", raw, flags=re.I)
+    q = re.sub(r"^(traduz(ir|e)?|translate)\s+(pra|para|pro|p/)?\s*(ingl[eê]s|portugu[eê]s|en|pt)?\s*", "", q, flags=re.I).strip()
+    t = raw.lower()
+    pair = "pt|en"
+    if re.search(r"portugu[eê]s|\bpt\b", t) and not re.search(r"ingl", t):
+        pair = "en|pt"
+    if not q:
+        return "O que eu traduzo?"
+    r = requests.get(
+        "https://api.mymemory.translated.net/get",
+        params={"q": q[:500], "langpair": pair},
+        headers=UA,
+        timeout=12,
+    )
+    r.raise_for_status()
+    text = (r.json().get("responseData") or {}).get("translatedText") or ""
+    return text or "Não traduzi."
+
+
+def password(n: int = 16) -> str:
+    n = max(8, min(int(n), 64))
+    alphabet = string.ascii_letters + string.digits + "!@#$%&*?"
+    pw = "".join(secrets.choice(alphabet) for _ in range(n))
+    try:
+        clipboard_set(pw)
+        return f"Senha gerada e copiada: {pw}"
+    except Exception:
+        return f"Senha gerada: {pw}"
+
+
+def choose(raw: str) -> str:
+    t = re.sub(r"^(jeremias[,:\s]*)", "", raw, flags=re.I)
+    t = re.sub(r"^(escolhe|escolhe entre|decide)\s*", "", t, flags=re.I)
+    parts = re.split(r"\s+ou\s+", t, flags=re.I)
+    parts = [p.strip(" ?.") for p in parts if p.strip()]
+    if len(parts) < 2:
+        return "Me dá opções com 'ou'. Ex: pizza ou lasanha."
+    return "Escolhi: " + secrets.choice(parts)
+
+
+def countdown(raw: str) -> str:
+    m = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", raw)
+    if not m:
+        return "Manda a data: faltam quantos dias pra 15/11/2026"
+    d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if y < 100:
+        y += 2000
+    try:
+        target = datetime(y, mo, d)
+    except ValueError:
+        return "Data inválida."
+    delta = (target.date() - datetime.now().date()).days
+    if delta == 0:
+        return "É hoje."
+    if delta < 0:
+        return f"Foi há {abs(delta)} dias."
+    return f"Faltam {delta} dias pra {d:02d}/{mo:02d}/{y}."
+
+
+def find_files(query: str) -> str:
+    q = re.sub(r"^(jeremias[,:\s]*)", "", query, flags=re.I)
+    q = re.sub(r"^(acha|acha o arquivo|procura o arquivo|busca arquivo|onde est[aá])\s*", "", q, flags=re.I).strip()
+    if len(q) < 2:
+        return "Qual arquivo?"
+    hits: list[str] = []
+    roots = [desktop_dir(), Path.home() / "Documents", Path.home() / "Downloads"]
+    needle = q.lower()
+    for root in roots:
+        if not root.exists():
+            continue
+        for pat in ("*", "*/*"):
+            for p in root.glob(pat):
+                if needle in p.name.lower():
+                    hits.append(str(p))
+                if len(hits) >= 12:
+                    return "Achei:\n" + "\n".join(hits)
+    return "Achei:\n" + "\n".join(hits) if hits else f'Não achei "{q}" na Área de Trabalho, Documentos e Downloads.'
+
+
+def media(action: str) -> str:
+    if os.name != "nt":
+        return "Controle de mídia só no Windows."
+    import ctypes
+
+    key = {"play": 0xB3, "pause": 0xB3, "next": 0xB0, "prev": 0xB1, "stop": 0xB2}.get(action, 0xB3)
+    ctypes.windll.user32.keybd_event(key, 0, 0, 0)
+    ctypes.windll.user32.keybd_event(key, 0, 2, 0)
+    return {"play": "play/pause", "pause": "play/pause", "next": "próxima", "prev": "anterior", "stop": "stop"}.get(action, action)
+
+
+def pomodoro() -> str:
+    return arm_timer("me avisa em 25 minutos pomodoro")
+
+
+def _load_reminders() -> list:
+    if not REMINDERS_PATH.exists():
+        return []
+    try:
+        return json.loads(REMINDERS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+
+def _save_reminders(items: list) -> None:
+    REMINDERS_PATH.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def arm_timer(raw: str) -> str:
+    seconds, label = parse_delay(raw)
+    fire_at = time.time() + seconds
+
+    def fire() -> None:
+        items = [i for i in _load_reminders() if i.get("fire_at") != fire_at]
+        _save_reminders(items)
+        if _timer_hook:
+            _timer_hook(label)
+
+    threading.Timer(seconds, fire).start()
+    items = _load_reminders()
+    items.append({"fire_at": fire_at, "label": label})
+    _save_reminders(items)
+    human = f"{seconds // 60} min" if seconds >= 60 else f"{seconds} s"
+    return f"Timer {human} armado. {label}"
+
+
+def restore_reminders() -> str:
+    now = time.time()
+    kept = []
+    n = 0
+    for item in _load_reminders():
+        delay = float(item.get("fire_at") or 0) - now
+        label = str(item.get("label") or "timer")
+        if delay <= 0:
+            if _timer_hook:
+                _timer_hook(label + " (atrasado)")
+            continue
+        threading.Timer(delay, lambda l=label: _timer_hook and _timer_hook(l)).start()
+        kept.append(item)
+        n += 1
+    _save_reminders(kept)
+    return f"{n} lembrete(s) rearmados." if n else ""

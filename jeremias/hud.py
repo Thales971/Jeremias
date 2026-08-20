@@ -63,6 +63,7 @@ class JeremiasApp(ctk.CTk):
         self._build_right()
 
         tools.set_timer_hook(lambda label: self.bus.put(("timer", label)))
+        tools.restore_reminders()
         self.after(40, self._tick)
         self.after(80, self._drain)
         self.after(400, self._boot_weather)
@@ -206,6 +207,9 @@ class JeremiasApp(ctk.CTk):
             ("seno de 30", "Seno de 30"),
             ("2x+4=10", "Quanto é 2x+4=10"),
             ("clima agora", "Qual a temperatura em Valinhos?"),
+            ("notícias", "Manchetes do G1"),
+            ("dólar", "Qual o dólar?"),
+            ("pomodoro", "pomodoro"),
             ("status do pc", "status do pc"),
             ("timer 1 min", "me avisa em 1 minuto prova"),
             ("piada", "Conta uma piada"),

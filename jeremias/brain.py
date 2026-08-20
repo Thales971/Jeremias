@@ -20,6 +20,31 @@ def detect(raw: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     if re.search(r"\b(piada|conta uma piada|me faz rir)\b", t):
         return [("joke", "")]
+    if re.search(r"\b(not[ií]cia|manchete|g1)\b", t):
+        return [("news", "")]
+    if re.search(r"\b(d[oó]lar|euro|cota[cç][aã]o)\b", t):
+        return [("fx", "")]
+    if re.search(r"\b(ip p[uú]blico|meu ip)\b", t):
+        return [("ip", "")]
+    if re.search(r"\b(traduz|translate)\b", t):
+        return [("translate", raw)]
+    if re.search(r"\b(gera(r)? senha|senha forte)\b", t):
+        n = re.search(r"(\d+)", t)
+        return [("password", n.group(1) if n else "16")]
+    if re.search(r"\b(escolhe entre|escolhe)\b.+\bou\b", t):
+        return [("choose", raw)]
+    if re.search(r"\b(faltam quantos dias|quantos dias faltam|countdown)\b", t):
+        return [("countdown", raw)]
+    if re.search(r"\b(acha o arquivo|procura o arquivo|busca arquivo|onde est[aá] o arquivo)\b", t):
+        return [("find", raw)]
+    if re.search(r"\b(pr[oó]xima (m[uú]sica|faixa))\b", t):
+        return [("media", "next")]
+    if re.search(r"\b((m[uú]sica|faixa) anterior)\b", t):
+        return [("media", "prev")]
+    if re.search(r"\b(pausa a m[uú]sica|toca a m[uú]sica|play.?pause|continua a m[uú]sica)\b", t):
+        return [("media", "play")]
+    if re.search(r"\bpomodoro\b", t):
+        return [("pomodoro", "")]
     if re.search(r"\b(me avisa|timer|alarme|me lembra)\b", t) or re.search(
         r"\b(daqui a|em)\s+\d+\s*(minuto|minutos|segundo|segundos|hora|horas)\b", t
     ):
@@ -167,6 +192,26 @@ def run_tools(raw: str, city_default: str, confirm: ConfirmFn | None) -> list[di
                 result = tools.sysinfo()
             elif tool == "listdir":
                 result = tools.list_known(arg)
+            elif tool == "news":
+                result = tools.news()
+            elif tool == "fx":
+                result = tools.fx()
+            elif tool == "ip":
+                result = tools.public_ip()
+            elif tool == "translate":
+                result = tools.translate(arg)
+            elif tool == "password":
+                result = tools.password(int(arg or 16))
+            elif tool == "choose":
+                result = tools.choose(arg)
+            elif tool == "countdown":
+                result = tools.countdown(arg)
+            elif tool == "find":
+                result = tools.find_files(arg)
+            elif tool == "media":
+                result = tools.media(arg)
+            elif tool == "pomodoro":
+                result = tools.pomodoro()
             else:
                 result = "ferramenta desconhecida"
             hits.append({"tool": tool, "arg": arg, "result": result})

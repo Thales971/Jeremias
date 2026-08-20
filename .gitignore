@@ -5,6 +5,7 @@ __pycache__/
 *.pyo
 config.json
 notes.json
+reminders.json
 chat.log
 *.log
 .DS_Store
