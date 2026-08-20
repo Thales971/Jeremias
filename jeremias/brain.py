@@ -41,7 +41,7 @@ def detect(raw: str) -> list[tuple[str, str]]:
     if re.search(r"\b(cria[r]?\s+(uma\s+)?pasta|mkdir|nova pasta)\b", t):
         m = re.search(r"(?:pasta|mkdir)\s+(?:chamada|com o nome|nome)?\s*[\"']?([^\"']+)[\"']?", raw, re.I)
         out.append(("folder", (m.group(1) if m else "Jeremias").strip()))
-    if re.search(r"\b(print|screenshot|captura de tela)\b", t):
+    if re.search(r"\b(screenshot|captura de tela|tira um print|print da tela)\b", t) and "print(" not in raw.lower():
         out.append(("screenshot", ""))
     if re.search(r"\b(terminal|cmd|powershell|prompt|roda o comando|executa o comando)\b", t):
         arg = re.sub(r"^.*?(terminal|cmd|powershell|comando)\s*[:\-]?\s*", "", raw, flags=re.I).strip()

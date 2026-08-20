@@ -63,45 +63,71 @@ def now_pt() -> str:
 
 
 def weather(city: str = "Valinhos") -> str:
-    geo = requests.get(
-        "https://geocoding-api.open-meteo.com/v1/search",
-        params={"name": city, "count": 1, "language": "pt"},
+    try:
+        geo = requests.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": city, "count": 1, "language": "pt"},
+            headers={"User-Agent": "Jeremias/1.0"},
+            timeout=10,
+        )
+        geo.raise_for_status()
+        results = geo.json().get("results") or []
+        if not results:
+            return f'Não achei a cidade "{city}".'
+        loc = results[0]
+        w = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": loc["latitude"],
+                "longitude": loc["longitude"],
+                "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+                "timezone": "America/Sao_Paulo",
+            },
+            headers={"User-Agent": "Jeremias/1.0"},
+            timeout=10,
+        )
+        if w.status_code == 429:
+            return _weather_wttr(city)
+        w.raise_for_status()
+        c = w.json()["current"]
+        codes = {
+            0: "céu limpo",
+            1: "principalmente limpo",
+            2: "parcialmente nublado",
+            3: "nublado",
+            45: "nevoeiro",
+            61: "chuva fraca",
+            63: "chuva",
+            65: "chuva forte",
+            80: "pancadas",
+            95: "trovoada",
+        }
+        desc = codes.get(c["weather_code"], "condição indefinida")
+        where = loc["name"] + (f", {loc['admin1']}" if loc.get("admin1") else "")
+        return (
+            f"{where}: {c['temperature_2m']}°C, {desc}. "
+            f"Umidade {c['relative_humidity_2m']}%, vento {round(c['wind_speed_10m'])} km/h."
+        )
+    except Exception:
+        return _weather_wttr(city)
+
+
+def _weather_wttr(city: str) -> str:
+    r = requests.get(
+        f"https://wttr.in/{city}",
+        params={"format": "j1"},
+        headers={"User-Agent": "Jeremias/1.0"},
         timeout=10,
     )
-    geo.raise_for_status()
-    results = geo.json().get("results") or []
-    if not results:
-        return f'Não achei a cidade "{city}".'
-    loc = results[0]
-    w = requests.get(
-        "https://api.open-meteo.com/v1/forecast",
-        params={
-            "latitude": loc["latitude"],
-            "longitude": loc["longitude"],
-            "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
-            "timezone": "America/Sao_Paulo",
-        },
-        timeout=10,
-    )
-    w.raise_for_status()
-    c = w.json()["current"]
-    codes = {
-        0: "céu limpo",
-        1: "principalmente limpo",
-        2: "parcialmente nublado",
-        3: "nublado",
-        45: "nevoeiro",
-        61: "chuva fraca",
-        63: "chuva",
-        65: "chuva forte",
-        80: "pancadas",
-        95: "trovoada",
-    }
-    desc = codes.get(c["weather_code"], "condição indefinida")
-    where = loc["name"] + (f", {loc['admin1']}" if loc.get("admin1") else "")
+    r.raise_for_status()
+    data = r.json()
+    cur = data["current_condition"][0]
+    area = data.get("nearest_area", [{}])[0]
+    where = area.get("areaName", [{}])[0].get("value", city)
+    desc = cur["weatherDesc"][0]["value"].lower()
     return (
-        f"{where}: {c['temperature_2m']}°C, {desc}. "
-        f"Umidade {c['relative_humidity_2m']}%, vento {round(c['wind_speed_10m'])} km/h."
+        f"{where}: {cur['temp_C']}°C, {desc}. "
+        f"Umidade {cur['humidity']}%, vento {cur['windspeedKmph']} km/h."
     )
 
 
