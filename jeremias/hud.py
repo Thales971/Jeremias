@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import tkinter as tk
+from datetime import datetime
 from tkinter import messagebox
 from typing import Any
 
@@ -28,6 +29,7 @@ class JeremiasApp(ctk.CTk):
         self.bus: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.angle = 0
         self.busy = False
+        self.live = False
 
         ctk.set_appearance_mode("dark")
         self.title("JEREMIAS")
@@ -63,6 +65,8 @@ class JeremiasApp(ctk.CTk):
         self.canvas.pack(pady=16)
         self.status = ctk.CTkLabel(side, text="idle", text_color=YELLOW, font=ctk.CTkFont(size=12))
         self.status.pack()
+        self.clock = ctk.CTkLabel(side, text="", text_color=STEEL, font=ctk.CTkFont(family="Consolas", size=13))
+        self.clock.pack(pady=(4, 0))
         self.persona_btn = ctk.CTkButton(
             side,
             text=f"modo {self.cfg['personality']}",
@@ -72,6 +76,22 @@ class JeremiasApp(ctk.CTk):
             command=self._toggle_persona,
         )
         self.persona_btn.pack(padx=16, pady=(20, 8), fill="x")
+        ctk.CTkButton(
+            side,
+            text="mic contínuo",
+            fg_color=PANEL,
+            hover_color=LINE,
+            text_color=FG,
+            command=self._toggle_live,
+        ).pack(padx=16, pady=4, fill="x")
+        ctk.CTkButton(
+            side,
+            text="iniciar com o windows",
+            fg_color=PANEL,
+            hover_color=LINE,
+            text_color=FG,
+            command=lambda: self._submit("Iniciar automaticamente com o Windows"),
+        ).pack(padx=16, pady=4, fill="x")
         ctk.CTkButton(
             side,
             text="tela cheia",
@@ -130,12 +150,23 @@ class JeremiasApp(ctk.CTk):
         )
         self.term.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         self.term.configure(state="disabled")
+        self.math_lbl = ctk.CTkLabel(
+            side,
+            text="—",
+            text_color=YELLOW,
+            font=ctk.CTkFont(family="Consolas", size=16, weight="bold"),
+            wraplength=220,
+        )
+        self.math_lbl.pack(fill="x", padx=12, pady=(4, 8))
         for label, cmd in (
+            ("seno de 30", "Seno de 30"),
+            ("2x+4=10", "Quanto é 2x+4=10"),
             ("clima agora", "Qual a temperatura em Valinhos?"),
+            ("piada", "Conta uma piada"),
+            ("youtube lofi", "Abre o YouTube lofi"),
             ("abrir chrome", "Abre o Chrome"),
-            ("pasta Teste", "Cria uma pasta chamada Teste"),
+            ("gmail", "Abre o Gmail"),
             ("python 2+2", "Roda python: print(2+2)"),
-            ("print da tela", "Tira um print"),
         ):
             ctk.CTkButton(
                 side,
@@ -145,6 +176,12 @@ class JeremiasApp(ctk.CTk):
                 text_color=FG,
                 command=lambda c=cmd: self._submit(c),
             ).pack(fill="x", padx=12, pady=3)
+
+    def _toggle_live(self) -> None:
+        self.live = not self.live
+        self._log("jeremias", "Microfone contínuo ligado." if self.live else "Microfone contínuo off.")
+        if self.live and not self.busy:
+            self._mic()
 
     def _toggle_persona(self) -> None:
         self.cfg["personality"] = "formal" if self.cfg["personality"] == "zueira" else "zueira"
@@ -227,10 +264,14 @@ class JeremiasApp(ctk.CTk):
                     self._set_status("idle")
                     self._log("jeremias", reply)
                     for h in hits:
-                        if h["tool"] in {"terminal", "code"}:
+                        if h["tool"] in {"terminal", "code", "lang"}:
                             self._term(f"$ {h['arg']}\n{h['result']}")
+                        if h["tool"] == "math":
+                            self.math_lbl.configure(text=h["result"][:80])
                     if self.cfg.get("voice_enabled", True):
                         self.voice.speak(reply)
+                    if self.live and not self.busy:
+                        self.after(400, self._mic)
         except queue.Empty:
             pass
         self.after(80, self._drain)
@@ -264,6 +305,7 @@ class JeremiasApp(ctk.CTk):
             style="arc",
         )
         c.create_oval(cx - 12, cy - 12, cx + 12, cy + 12, fill=YELLOW, outline="")
+        self.clock.configure(text=datetime.now().strftime("%H:%M:%S"))
         step = 8 if self.busy else 3
         self.angle = (self.angle + step) % 360
         self.after(33, self._tick)

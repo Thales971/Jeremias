@@ -4,6 +4,8 @@
   "personality": "zueira",
   "language": "pt-BR",
   "xai_api_key": "",
+  "openrouter_api_key": "",
+  "groq_api_key": "",
   "wake_word": "jeremias",
   "voice_enabled": true,
   "voice_rate": 175

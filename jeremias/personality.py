@@ -15,9 +15,12 @@ def system_prompt(personality: str) -> str:
 
 
 def greet(personality: str) -> str:
+    from jeremias.tools import greeting
+
+    g = greeting()
     if personality == "formal":
-        return "Sistemas operacionais. Jeremias à disposição, senhor."
-    return "Jeremias online. Pode mandar, chefe — clima, pesquisa, python, abrir app, pasta, terminal."
+        return f"{g}, senhor. Sistemas operacionais. Jeremias à disposição."
+    return f"{g}, chefe. Jeremias no ar — clima, conta, YouTube, zap, e-mail, python."
 
 
 def style(personality: str, kind: str, extra: str = "") -> str:
@@ -44,9 +47,9 @@ def style(personality: str, kind: str, extra: str = "") -> str:
             else f"Captura de tela armazenada em {extra}."
         ),
         "unknown": (
-            "Não peguei essa. Manda de novo — abrir app, clima, pesquisar, terminal, python, criar pasta."
+            "Não peguei essa. Manda de novo — abrir app, clima, conta, YouTube, zap, e-mail, terminal, python, pasta."
             if z
-            else "Não compreendi o comando. Exemplos: abrir, clima, pesquisar, terminal, python, criar pasta."
+            else "Não compreendi o comando. Exemplos: abrir, clima, matemática, YouTube, WhatsApp, e-mail, terminal, python, criar pasta."
         ),
         "error": f"{'Deu ruim' if z else 'Falha'}: {extra}",
     }

@@ -46,6 +46,21 @@ APP_ALIASES = {
     "powershell": ["powershell"],
     "terminal": ["wt", "powershell", "gnome-terminal"],
     "whatsapp": ["whatsapp"],
+    "gmail": ["gmail"],
+    "documentos": ["explorer"],
+}
+
+KNOWN_FOLDERS = {
+    "documentos": lambda: Path.home() / "Documents",
+    "downloads": lambda: Path.home() / "Downloads",
+    "imagens": lambda: Path.home() / "Pictures",
+    "fotos": lambda: Path.home() / "Pictures",
+    "musicas": lambda: Path.home() / "Music",
+    "vídeos": lambda: Path.home() / "Videos",
+    "videos": lambda: Path.home() / "Videos",
+    "desktop": lambda: desktop_dir(),
+    "area de trabalho": lambda: desktop_dir(),
+    "área de trabalho": lambda: desktop_dir(),
 }
 
 
@@ -161,6 +176,18 @@ def open_app(name: str) -> str:
     if key in {"youtube", "yt"}:
         webbrowser.open("https://youtube.com")
         return "YouTube"
+    if key in {"gmail"}:
+        return open_site("https://mail.google.com", "Gmail")
+    if key in {"whatsapp web", "zap web"}:
+        return open_site("https://web.whatsapp.com", "WhatsApp Web")
+    folder_fn = KNOWN_FOLDERS.get(key)
+    if folder_fn:
+        path = folder_fn()
+        if os.name == "nt":
+            os.startfile(path)  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+        return str(path)
     if key.startswith("http://") or key.startswith("https://"):
         webbrowser.open(raw)
         return raw
@@ -256,3 +283,139 @@ def run_python(code: str) -> str:
     except Exception as exc:  # noqa: BLE001
         return f"{type(exc).__name__}: {exc}"
     return buf.getvalue().strip() or "(sem saída)"
+
+
+JOKES = [
+    "Por que o livro de matemática se suicidou? Porque tinha muitos problemas.",
+    "O zero disse pro oito: que cinto estiloso.",
+    "Sabe qual o peixe hidratado? O pi-au.",
+    "O que o pato falou pra pata? Vem quá.",
+    "Por que o jacaré tirou o filho da escola? Porque ele réptil de ano.",
+    "Qual o contrário de volátil? Vem cá sobrinho.",
+    "O que a impressora falou pro papel? Esse trabalho é uma viajem.",
+    "Dois fios se encontraram. O que um falou pro outro? E aí, terra.",
+    "Por que o pinheiro não luta caratê? Porque ele tem medo de karateka.",
+]
+
+
+def joke() -> str:
+    import random
+
+    return random.choice(JOKES)
+
+
+def greeting() -> str:
+    h = datetime.now().hour
+    if h < 12:
+        return "Bom dia"
+    if h < 18:
+        return "Boa tarde"
+    return "Boa noite"
+
+
+def youtube(query: str = "") -> str:
+    if query.strip():
+        webbrowser.open(f"https://www.youtube.com/results?search_query={quote(query.strip())}")
+        return f"YouTube: {query.strip()}"
+    webbrowser.open("https://www.youtube.com")
+    return "YouTube aberto."
+
+
+def open_site(url: str, label: str) -> str:
+    webbrowser.open(url)
+    return label
+
+
+def whatsapp(raw: str) -> str:
+    m = re.search(r"(\+?\d[\d\s\-()]{8,})\s*(?:e diz|:|,)?\s*(.*)$", raw, re.I)
+    digits = re.sub(r"\D", "", m.group(1)) if m else ""
+    if len(digits) == 11:
+        digits = "55" + digits
+    text = (m.group(2) if m else "Oi").strip() or "Oi"
+    url = (
+        f"https://wa.me/{digits}?text={quote(text)}"
+        if digits
+        else f"https://web.whatsapp.com/send?text={quote(text)}"
+    )
+    webbrowser.open(url)
+    return f"WhatsApp {'para ' + digits if digits else ''} — {text}"
+
+
+def email(raw: str) -> str:
+    found = re.search(r"([\w.+-]+@[\w.-]+\.[a-z]{2,})", raw, re.I)
+    to = found.group(1) if found else ""
+    subject_m = re.search(r"assunto\s+(.+?)(?:\s+corpo\s+|$)", raw, re.I)
+    body_m = re.search(r"corpo\s+(.+)$", raw, re.I)
+    subject = subject_m.group(1).strip() if subject_m else "Mensagem do Jeremias"
+    body = body_m.group(1).strip() if body_m else raw
+    webbrowser.open(f"mailto:{to}?subject={quote(subject)}&body={quote(body)}")
+    return f"E-mail para {to or '(sem destino)'} · {subject}"
+
+
+def run_lang(lang: str, code: str, confirm: ConfirmFn | None = None) -> str:
+    lang = lang.lower().strip()
+    runners = {
+        "python": ["python", "-c", code],
+        "py": ["python", "-c", code],
+        "node": ["node", "-e", code],
+        "js": ["node", "-e", code],
+        "javascript": ["node", "-e", code],
+        "powershell": ["powershell", "-NoProfile", "-Command", code],
+        "ps": ["powershell", "-NoProfile", "-Command", code],
+        "cmd": ["cmd", "/c", code],
+        "bash": ["bash", "-c", code],
+        "sh": ["sh", "-c", code],
+        "ruby": ["ruby", "-e", code],
+        "php": ["php", "-r", code],
+        "lua": ["lua", "-e", code],
+    }
+    argv = runners.get(lang)
+    if not argv:
+        return run_terminal(code, confirm=confirm)
+    completed = subprocess.run(argv, capture_output=True, text=True, timeout=20)
+    out = ((completed.stdout or "") + (completed.stderr or "")).strip()
+    return out[:6000] or f"(sem saída, código {completed.returncode})"
+
+
+def volume(action: str) -> str:
+    if os.name != "nt":
+        return "Volume por atalho só no Windows."
+    import ctypes
+
+    key = {"up": 0xAF, "down": 0xAE, "mute": 0xAD}.get(action, 0xAF)
+    ctypes.windll.user32.keybd_event(key, 0, 0, 0)
+    ctypes.windll.user32.keybd_event(key, 0, 2, 0)
+    return {"up": "volume +", "down": "volume -", "mute": "mute"}.get(action, action)
+
+
+def lock_pc() -> str:
+    if os.name != "nt":
+        return "Travar a sessão é Windows por enquanto."
+    import ctypes
+
+    ctypes.windll.user32.LockWorkStation()
+    return "Tela bloqueada."
+
+
+def enable_autostart() -> str:
+    root = Path(__file__).resolve().parent.parent
+    if os.name != "nt":
+        return "No Windows eu coloco um atalho na pasta Inicializar. Aqui não é Windows."
+    startup = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\Startup"
+    startup.mkdir(parents=True, exist_ok=True)
+    bat = startup / "Jeremias.bat"
+    bat.write_text(
+        f'@echo off\ncd /d "{root}"\n'
+        "if exist .venv\\Scripts\\pythonw.exe (.venv\\Scripts\\pythonw.exe main.py) else pythonw main.py\n",
+        encoding="utf-8",
+    )
+    return f"Vai abrir com o Windows: {bat}"
+
+
+def math_eval(question: str) -> str:
+    from jeremias.math import evaluate
+
+    data = evaluate(question)
+    if not data.get("ok"):
+        return data.get("result") or "não calculei"
+    return f"{data['expr']}  →  {data['result']}"

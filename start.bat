@@ -12,6 +12,12 @@ if not exist .venv (
 call .venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-if not exist config.json copy config.example.json config.json
+if not exist config.json (
+  copy config.example.json config.json
+  echo.
+  echo Cole as chaves no config.json (openrouter_api_key / groq_api_key).
+  echo Esse arquivo NAO vai pro GitHub.
+  echo.
+)
 python main.py
 if errorlevel 1 pause

@@ -14,6 +14,8 @@ DEFAULTS: dict[str, Any] = {
     "personality": "zueira",
     "language": "pt-BR",
     "xai_api_key": "",
+    "openrouter_api_key": "",
+    "groq_api_key": "",
     "wake_word": "jeremias",
     "voice_enabled": True,
     "voice_rate": 175,
@@ -30,6 +32,12 @@ def load() -> dict[str, Any]:
     env_key = os.environ.get("XAI_API_KEY") or os.environ.get("GROK_API_KEY")
     if env_key and not data.get("xai_api_key"):
         data["xai_api_key"] = env_key
+    or_key = os.environ.get("OPENROUTER_API_KEY")
+    if or_key and not data.get("openrouter_api_key"):
+        data["openrouter_api_key"] = or_key
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key and not data.get("groq_api_key"):
+        data["groq_api_key"] = groq_key
     if data.get("personality") not in ("zueira", "formal"):
         data["personality"] = "zueira"
     return data
