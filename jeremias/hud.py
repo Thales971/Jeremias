@@ -98,6 +98,14 @@ class JeremiasApp(ctk.CTk):
         self.persona_btn.pack(padx=16, pady=(20, 8), fill="x")
         ctk.CTkButton(
             side,
+            text="testar voz",
+            fg_color=YELLOW,
+            hover_color=LINE,
+            text_color=BG,
+            command=lambda: self._speak("Jeremias no controle. Sistemas operacionais."),
+        ).pack(padx=16, pady=4, fill="x")
+        ctk.CTkButton(
+            side,
             text="mic contínuo",
             fg_color=PANEL,
             hover_color=LINE,
@@ -200,7 +208,11 @@ class JeremiasApp(ctk.CTk):
     def _speak(self, text: str) -> None:
         self.speaking = True
         self._set_status("falando")
-        self.voice.speak(text, on_end=lambda: self.bus.put(("spoke", None)))
+        self.voice.speak(
+            text,
+            on_end=lambda: self.bus.put(("spoke", None)),
+            on_error=lambda e: self.bus.put(("tts_err", e)),
+        )
 
     def _toggle_live(self) -> None:
         self.live = not self.live
@@ -286,7 +298,8 @@ class JeremiasApp(ctk.CTk):
                 elif kind == "voice_err":
                     self._set_status("idle")
                     self._log("jeremias", payload)
-                    self._speak(payload)
+                elif kind == "tts_err":
+                    self._log("jeremias", f"Voz: {payload}")
                 elif kind == "confirm":
                     msg, box = payload
                     box.put(bool(messagebox.askyesno("Jeremias", msg)))

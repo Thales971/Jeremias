@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -12,18 +15,16 @@ ListenCb = Callable[[str], None]
 ErrCb = Callable[[str], None]
 EndCb = Callable[[], None]
 
-# Antonio, grave, frio — o mais perto de Ultron em pt-BR sem API paga.
 EDGE_VOICE = "pt-BR-AntonioNeural"
-EDGE_RATE = "-18%"
-EDGE_PITCH = "-25Hz"
+EDGE_RATE = "-20%"
+EDGE_PITCH = "-30Hz"
 
 
 class Voice:
-    def __init__(self, rate: int = 130) -> None:
+    def __init__(self, rate: int = 120) -> None:
         self.rate = rate
-        self._engine = None
         self._lock = threading.Lock()
-        self._tmp = Path(tempfile.gettempdir()) / "jeremias-voice.mp3"
+        self.last_error = ""
 
     def _clean(self, text: str) -> str:
         t = re.sub(r"https?://\S+", "", text or "")
@@ -33,7 +34,7 @@ class Voice:
             t = t[:420].rsplit(" ", 1)[0] + "."
         return t
 
-    def speak(self, text: str, on_end: EndCb | None = None) -> None:
+    def speak(self, text: str, on_end: EndCb | None = None, on_error: ErrCb | None = None) -> None:
         clean = self._clean(text)
         if not clean:
             if on_end:
@@ -41,66 +42,127 @@ class Voice:
             return
 
         def _run() -> None:
+            err = ""
             with self._lock:
-                ok = self._speak_edge(clean) or self._speak_sapi(clean)
-                if not ok:
-                    print("TTS falhou — instala: pip install edge-tts pygame")
+                try:
+                    ok = self._edge(clean) or self._sapi_process(clean)
+                    if not ok:
+                        err = self.last_error or "Voz falhou. Roda: pip install edge-tts"
+                except Exception as exc:  # noqa: BLE001
+                    err = str(exc)
+            if err and on_error:
+                on_error(err)
             if on_end:
                 on_end()
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _speak_edge(self, text: str) -> bool:
+    def _fail(self, msg: str) -> bool:
+        self.last_error = msg
+        return False
+
+    def _edge(self, text: str) -> bool:
         try:
             import edge_tts
         except ImportError:
-            return False
+            return self._fail("Falta edge-tts")
 
-        async def _synth() -> None:
-            comm = edge_tts.Communicate(text, EDGE_VOICE, rate=EDGE_RATE, pitch=EDGE_PITCH)
-            await comm.save(str(self._tmp))
+        tmp = Path(tempfile.gettempdir()) / f"jeremias_{os.getpid()}_{int(time.time() * 1000)}.mp3"
+
+        async def _synth(pitch: str | None) -> None:
+            kw: dict = {"rate": EDGE_RATE}
+            if pitch:
+                kw["pitch"] = pitch
+            comm = edge_tts.Communicate(text, EDGE_VOICE, **kw)
+            await comm.save(str(tmp))
 
         try:
-            asyncio.run(_synth())
-            return self._play_mp3(self._tmp)
+            try:
+                asyncio.run(_synth(EDGE_PITCH))
+            except Exception:
+                asyncio.run(_synth(None))
+            if not tmp.exists() or tmp.stat().st_size < 200:
+                return self._fail("edge-tts gerou arquivo vazio")
+            ok = self._play_mci(tmp) or self._play_pygame(tmp)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return ok or self._fail("gerou o áudio mas o Windows não tocou")
+        except Exception as exc:  # noqa: BLE001
+            return self._fail(f"edge-tts: {exc}")
+
+    def _play_mci(self, path: Path) -> bool:
+        if os.name != "nt":
+            return False
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            winmm = ctypes.WinDLL("winmm")
+            winmm.mciSendStringW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.UINT, wintypes.HANDLE]
+            winmm.mciSendStringW.restype = wintypes.DWORD
+            buf = ctypes.create_unicode_buffer(512)
+            alias = "jeremias_tts"
+            p = str(path.resolve())
+
+            def send(cmd: str) -> int:
+                return int(winmm.mciSendStringW(cmd, buf, 511, None))
+
+            send(f"close {alias}")
+            err = send(f'open "{p}" type mpegvideo alias {alias}')
+            if err:
+                err = send(f'open "{p}" alias {alias}')
+            if err:
+                return False
+            send(f"play {alias} wait")
+            send(f"close {alias}")
+            return True
         except Exception:
             return False
 
-    def _play_mp3(self, path: Path) -> bool:
+    def _play_pygame(self, path: Path) -> bool:
         try:
             import pygame
 
-            if not pygame.mixer.get_init():
-                pygame.mixer.init()
+            pygame.mixer.quit()
+            pygame.mixer.init()
             pygame.mixer.music.load(str(path))
             pygame.mixer.music.set_volume(1.0)
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
-                time.sleep(0.08)
+                time.sleep(0.05)
+            pygame.mixer.music.unload()
             return True
         except Exception:
             return False
 
-    def _speak_sapi(self, text: str) -> bool:
+    def _sapi_process(self, text: str) -> bool:
+        """SAPI em processo separado — no Windows a thread do app não fala."""
+        script = (
+            "import sys,pyttsx3\n"
+            "t=sys.stdin.read()\n"
+            "e=pyttsx3.init()\n"
+            "e.setProperty('rate',115)\n"
+            "e.setProperty('volume',1.0)\n"
+            "for v in e.getProperty('voices'):\n"
+            "    n=(str(v.name)+str(v.id)).lower()\n"
+            "    if 'pt' in n or 'brazil' in n or 'portug' in n:\n"
+            "        e.setProperty('voice', v.id); break\n"
+            "e.say(t); e.runAndWait()\n"
+        )
         try:
-            import pyttsx3
-        except ImportError:
-            return False
-        try:
-            if self._engine is None:
-                self._engine = pyttsx3.init()
-                self._engine.setProperty("rate", max(110, int(self.rate) - 40))
-                self._engine.setProperty("volume", 1.0)
-                for v in self._engine.getProperty("voices"):
-                    name = f"{getattr(v, 'name', '')} {getattr(v, 'id', '')}".lower()
-                    if "pt" in name or "portug" in name or "brazil" in name:
-                        self._engine.setProperty("voice", v.id)
-                        break
-            self._engine.say(text)
-            self._engine.runAndWait()
+            r = subprocess.run(
+                [sys.executable, "-c", script],
+                input=text.encode("utf-8"),
+                timeout=45,
+                capture_output=True,
+            )
+            if r.returncode != 0:
+                return self._fail((r.stderr or r.stdout or b"sapi falhou").decode("utf-8", "ignore")[:180])
             return True
-        except Exception:
-            return False
+        except Exception as exc:  # noqa: BLE001
+            return self._fail(f"sapi: {exc}")
 
     def listen_once(self, on_text: ListenCb, on_error: ErrCb | None = None) -> None:
         def _run() -> None:
@@ -112,9 +174,9 @@ class Voice:
                 return
             rec = sr.Recognizer()
             try:
-                text = self._capture(sr, rec)
-                if text:
-                    on_text(text)
+                heard = self._capture(sr, rec)
+                if heard:
+                    on_text(heard)
                 elif on_error:
                     on_error("Não ouvi nada.")
             except sr.WaitTimeoutError:
@@ -149,7 +211,7 @@ class Voice:
             import sounddevice as sd
         except ImportError as exc:
             raise RuntimeError(
-                "Falta lib de microfone. No PowerShell, na pasta Jeremias:  "
+                "Falta lib de microfone. "
                 ".\\.venv\\Scripts\\python.exe -m pip install sounddevice numpy"
             ) from exc
 
