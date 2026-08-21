@@ -2,7 +2,7 @@
 
 Assistente pessoal de **desktop** — não é site. Janela própria, HUD hi-tech (amarelo / preto / cinza / azul-escuro), voz grave, terminal, pesquisa, clima, matemática.
 
-Autor: **Thales Vitor Boehm** · [github.com/Thales971/Jeremias](https://github.com/Thales971/Jeremias)
+Autor: **Thales ** · [github.com/Thales971/Jeremias](https://github.com/Thales971/Jeremias)
 
 ## O que ele faz
 
